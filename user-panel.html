@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Intel Marketing - User Panel</title>
+<style>
+:root{--bg:#0b0b0b;--card:#171717;--gold:#c9a200;--muted:#bdbdbd;}
+body{margin:0;font-family:Inter, Arial, sans-serif;background:var(--bg);color:#fff;-webkit-font-smoothing:antialiased;}
+header{background:black;color:var(--gold);padding:16px;text-align:center;font-weight:700;font-size:20px}
+.container{max-width:980px;margin:18px auto;padding:12px}
+.card{background:var(--card);border-radius:12px;padding:14px;margin-bottom:16px;box-shadow:0 8px 30px rgba(0,0,0,0.6);border:1px solid #222}
+#notifBar{background:#111;color:var(--gold);padding:10px;border-radius:8px;overflow:hidden;white-space:nowrap}
+#notifText{display:inline-block;transform:translateX(0)}
+.product{display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;background:#0f0f0f;margin-bottom:10px;border:1px solid #222}
+.product img{width:76px;height:76px;object-fit:cover;border-radius:8px}
+.btn{background:var(--gold);color:#000;padding:8px 12px;border-radius:8px;border:none;cursor:pointer;font-weight:600}
+.small{font-size:13px;color:var(--muted)}
+.row{display:flex;gap:12px}
+.col{flex:1}
+.muted{color:var(--muted);font-size:13px}
+.center{text-align:center}
+.winner-img{width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--gold)}
+.footer{color:var(--muted);font-size:13px;text-align:center;margin-top:8px}
+</style>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
+<body>
+<header>Intel Marketing — User Panel</header>
+<div class="container">
+
+<div class="card" id="notifCard">
+  <div id="notifBar"><span id="notifText">Loading notifications…</span></div>
+</div>
+
+<!-- Top Earner -->
+<div class="card">
+  <h3 style="color:var(--gold);margin:0 0 8px 0">💰 Top Earner</h3>
+  <div id="topEarnerBox" class="row center small">Loading top earner…</div>
+</div>
+
+<!-- Latest Winner -->
+<div class="card">
+  <h3 style="color:var(--gold);margin:0 0 8px 0">🏆 Latest Winner</h3>
+  <div id="winnerBox" class="row center small">Loading winner…</div>
+</div>
+
+<!-- Offer Products -->
+<div class="card">
+  <h3 style="color:var(--gold);margin:0 0 8px 0">🔥 Special Offer Products</h3>
+  <div id="offerList" class="small">Loading offers…</div>
+</div>
+
+<!-- All Products -->
+<div class="card">
+  <h3 style="color:var(--gold);margin:0 0 8px 0">💼 Products</h3>
+  <div id="productList" class="small">Loading products…</div>
+</div>
+
+<!-- Withdraw -->
+<div class="card">
+  <h3 style="color:var(--gold);margin:0 0 8px 0">💳 Withdraw</h3>
+  <div class="row">
+    <div class="col">
+      <select id="withdrawMethod" class="small" style="width:100%;padding:8px;border-radius:8px;background:#0d0d0d;border:1px solid #222;color:#fff">
+        <option value="bkash">bKash</option>
+        <option value="nagad">Nagad</option>
+        <option value="rocket">Rocket</option>
+        <option value="bank">Bank</option>
+        <option value="card">Card</option>
+      </select>
+      <input id="accNumber" placeholder="Account / Number" style="width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1px solid #222;background:#0d0d0d;color:#fff">
+      <input id="withdrawAmount" placeholder="Amount (৳)" type="number" style="width:100%;margin-top:8px;padding:8px;border-radius:8px;border:1px solid #222;background:#0d0d0d;color:#fff">
+      <div class="muted" style="margin-top:8px">Min: 1000 ৳ • Max: 100000 ৳ • Charge: 15%</div>
+    </div>
+    <div style="width:160px;display:flex;flex-direction:column;justify-content:center;align-items:center">
+      <button id="withdrawBtn" class="btn" style="width:140px" onclick="withdraw()">Submit</button>
+    </div>
+  </div>
+</div>
+
+<!-- Withdraw History -->
+<div class="card">
+  <h3 style="color:var(--gold);margin:0 0 8px 0">📜 Withdraw History</h3>
+  <div id="historyArea" class="small muted">Loading…</div>
+</div>
+
+<div class="card center footer">Powered by Firebase • Theme: Black & Gold</div>
+</div>
+
+<script>
+// ---------- Firebase ----------
+const firebaseConfig = {
+  apiKey: "AIzaSyDQ0ELZn6I2bjUDL4izlyZl7yKxo4psU5M",
+  authDomain: "intel-investment-dashboard.firebaseapp.com",
+  databaseURL: "https://intel-investment-dashboard-default-rtdb.firebaseio.com",
+  projectId: "intel-investment-dashboard",
+  storageBucket: "intel-investment-dashboard.firebasestorage.app",
+  messagingSenderId: "677527087277",
+  appId: "1:677527087277:android:4f63be705e2abc5fa6be24"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// Helpers
+const $ = id => document.getElementById(id);
+let currentUserId = "demoUser"; // demo, replace with auth
+const WITHDRAW_MIN=1000, WITHDRAW_MAX=100000, WITHDRAW_CHARGE=0.15;
+
+// Notifications
+const notifText = $("notifText");
+const notifBar = $("notifBar");
+db.ref("adminNotif").on("value", snap=>{
+  let data = snap.val() || {};
+  let msgs = Array.isArray(data)?data:Object.values(data||{});
+  notifText.innerText = msgs.join("   •   ");
+  startMarquee();
+});
+let marqueeInterval;
+function startMarquee(){
+  const textWidth = notifText.offsetWidth;
+  let pos = notifBar.offsetWidth;
+  if(marqueeInterval) clearInterval(marqueeInterval);
+  marqueeInterval = setInterval(()=>{ pos -= 2; if(pos<-textWidth) pos=notifBar.offsetWidth; notifText.style.transform='translateX('+pos+'px)'; },30);
+}
+
+// Top Earner
+db.ref("topEarner").on("value",snap=>{
+  const data = snap.val();
+  if(data){
+    $("topEarnerBox").innerHTML = `
+      <img src="${data.photo}" style="width:56px;height:56px;border-radius:50%;border:2px solid var(--gold);margin-right:8px">
+      <div><b>${data.name}</b></div>
+    `;
+  }
+});
+
+// Latest Winner
+db.ref("winners").on("value", snap=>{
+  const data = snap.val();
+  if(data){
+    const last = Object.values(data).slice(-1)[0];
+    $("winnerBox").innerHTML = `<img src="${last.photo||'https://via.placeholder.com/56'}" class="winner-img"> <div style="margin-left:8px"><b style="color:var(--gold)">${last.name}</b><div class="small">${last.amount} ৳</div></div>`;
+  }
+});
+
+// Products & Offer Products
+function renderProducts(prods,containerId){
+  const container=$(containerId);
+  container.innerHTML='';
+  Object.entries(prods).forEach(([id,p])=>{
+    const div=document.createElement("div");
+    div.className="product";
+    div.innerHTML=`<img src="${p.img}" alt="${p.name}">
+      <div style="flex:1"><b style="color:var(--gold)">${p.name}</b><div class="small">Price: ${p.price} ৳</div><div class="small">Daily: ${p.daily} ৳</div><div class="small">Offer: ${p.offerTime || 'N/A'}</div></div>`;
+    container.appendChild(div);
+  });
+}
+db.ref("products").on("value", snap=>{
+  const prods = snap.val() || {};
+  // Offer products
+  const offers = Object.fromEntries(Object.entries(prods).filter(([k,p])=>p.offerTime));
+  renderProducts(offers,"offerList");
+  // Normal products
+  renderProducts(prods,"productList");
+});
+
+// Withdraw System
+function loadWithdraws(){
+  db.ref("withdraws").once("value").then(snap=>{
+    const reqs=snap.val()||{};
+    const arr=Object.values(reqs).filter(r=>r.user===currentUserId);
+    $("historyArea").innerHTML=arr.length?arr.map(r=>`<div style="padding:6px;border-bottom:1px solid #222"><b>${r.method}</b> → ${r.number} • ${r.amount}৳ (${r.status})</div>`).join(""):"No withdraw requests yet.";
+  });
+}
+function withdraw(){
+  const method=$("withdrawMethod").value;
+  const number=$("accNumber").value.trim();
+  const amount=parseFloat($("withdrawAmount").value);
+  if(!number||!amount){ alert("Fill all fields"); return; }
+  if(amount<WITHDRAW_MIN||amount>WITHDRAW_MAX){ alert("Amount must be between 1000-100000 ৳"); return; }
+  const charge=Math.round(amount*WITHDRAW_CHARGE);
+  const net=amount-charge;
+  db.ref("withdraws").push({user:currentUserId,method,number,amount,charge,net,status:"Pending",date:Date.now()});
+  alert(`Withdraw requested. Net: ${net} ৳ (charge ${charge} ৳)`);
+  $("accNumber").value=""; $("withdrawAmount").value="";
+  loadWithdraws();
+}
+loadWithdraws();
+</script>
+</body>
+</html>
